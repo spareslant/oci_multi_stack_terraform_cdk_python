@@ -1,4 +1,4 @@
-from constructs import Construct
+from constructs import Construct, Node
 from cdktf import TerraformStack, TerraformOutput
 from imports.tls import TlsProvider, PrivateKey
 from imports.local import LocalProvider, File
@@ -30,6 +30,8 @@ tenancy_profile_name="DEFAULT"
 tenancy_profile_config_file=f"{oci_config_dir}/config"
 
 class PrivilegedUser(TerraformStack):
+
+    desired_comp_id = None
     def __init__(self, scope: Construct, ns: str):
         super().__init__(scope, ns)
 
@@ -75,8 +77,9 @@ class PrivilegedUser(TerraformStack):
                 user_id=user.id,
                 key_value=api_keys.public_key_pem)
 
-        TerraformOutput(self, f"{compartment}_id",
+        comp_id = TerraformOutput(self, f"{compartment}_id",
                 value=comp.id)
+        self.desired_comp_id = comp_id.friendly_unique_id
         TerraformOutput(self, f"{priv_user}_id",
                 value=user.id)
         TerraformOutput(self, f"{priv_group}_id",
@@ -113,6 +116,9 @@ class PrivilegedUser(TerraformStack):
                 content=write_oci_config_file(priv_user, priv_user_oci_creds),
                 filename=new_oci_config_file,
                 file_permission="0600")
+
+    def name(self):
+        return Node.of(self).id
 
     def message(self):
         print(f"WARNING!!!!!!!!: Terraform might have written a new oci config file at {new_oci_config_file}. Terraform will manage this file automatically.")
