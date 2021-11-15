@@ -5,9 +5,9 @@ import os, io
 
 tenancy_profile_name = "DEFAULT"
 
-def get_local_oci_config_value(profile_name, config_field):
+def get_local_oci_config_value(profile_name, config_field, profile_config_file):
     c = configparser.ConfigParser()
-    c.read(os.environ['HOME'] + '/.oci/config')
+    c.read(profile_config_file)
     return c[profile_name][config_field]
 
 def write_oci_config_file(user, oci_user_creds):
@@ -22,4 +22,5 @@ def write_oci_config_file(user, oci_user_creds):
     return oci_config
 
 if __name__ == '__main__':
-    print(f"root_compartment_id = {get_local_oci_config_value(tenancy_profile_name, 'tenancy')}")
+    oci_user_config_file = os.environ['HOME'] + '/.oci/config'
+    print(f"root_compartment_id = {get_local_oci_config_value(tenancy_profile_name, 'tenancy', oci_user_config_file)}")

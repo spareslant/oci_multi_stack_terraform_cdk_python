@@ -11,8 +11,7 @@ from imports.oci import (
     IdentityPolicy,
     IdentityApiKey
     )
-from account import (
-    tenancy_profile_name,
+from local_utils import (
     get_local_oci_config_value,
     write_oci_config_file)
 
@@ -27,7 +26,8 @@ priv_user_private_key_file=f"{oci_config_dir}/{priv_user}_private_api_key.pem"
 oci_config_private_key_filename=f"~/.oci/{priv_user}_private_api_key.pem"
 priv_user_public_key_file=f"{oci_config_dir}/{priv_user}_public_api_key.pem"
 new_oci_config_file=f"{oci_config_dir}/config.{priv_user}"
-
+tenancy_profile_name="DEFAULT"
+tenancy_profile_config_file=f"{oci_config_dir}/config"
 
 class PrivilegedUser(TerraformStack):
     def __init__(self, scope: Construct, ns: str):
@@ -35,8 +35,8 @@ class PrivilegedUser(TerraformStack):
 
         # define resources here
         
-        tenancyID = get_local_oci_config_value(tenancy_profile_name, "tenancy")
-        region = get_local_oci_config_value(tenancy_profile_name, "region")
+        tenancyID = get_local_oci_config_value(tenancy_profile_name, "tenancy", tenancy_profile_config_file)
+        region = get_local_oci_config_value(tenancy_profile_name, "region", tenancy_profile_config_file)
         OciProvider(self, "oci",
                 config_file_profile=tenancy_profile_name)
 
