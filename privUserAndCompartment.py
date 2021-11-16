@@ -17,28 +17,30 @@ from local_utils import (
 
 import os
 
-compartment="CDK"
-priv_user="cdk-user"
-priv_group="cdk-group"
-group_policy_1=f"Allow group {priv_group} to manage all-resources in compartment {compartment}"
-oci_config_dir=f"{os.environ['HOME']}/.oci"
-priv_user_private_key_file=f"{oci_config_dir}/{priv_user}_private_api_key.pem"
-oci_config_private_key_filename=f"~/.oci/{priv_user}_private_api_key.pem"
-priv_user_public_key_file=f"{oci_config_dir}/{priv_user}_public_api_key.pem"
-new_oci_config_file=f"{oci_config_dir}/config.{priv_user}"
-tenancy_profile_name="DEFAULT"
-tenancy_profile_config_file=f"{oci_config_dir}/config"
+priv_compartment = "CDK"
+priv_user = "cdk-user"
+priv_group = "cdk-group"
+group_policy_1 = f"Allow group {priv_group} to manage all-resources in compartment {priv_compartment}"
+oci_config_dir = f"{os.environ['HOME']}/.oci"
+priv_user_private_key_file = f"{oci_config_dir}/{priv_user}_private_api_key.pem"
+oci_config_private_key_filename = f"~/.oci/{priv_user}_private_api_key.pem"
+priv_user_public_key_file = f"{oci_config_dir}/{priv_user}_public_api_key.pem"
+new_oci_config_file = f"{oci_config_dir}/config.{priv_user}"
+tenancy_profile_name = "DEFAULT"
+tenancy_profile_config_file = f"{oci_config_dir}/config"
 
 class PrivilegedUser(TerraformStack):
 
-    desired_comp_id = None
+    priv_compartment = None
+
     def __init__(self, scope: Construct, ns: str):
         super().__init__(scope, ns)
 
-        # define resources here
-        
         tenancyID = get_local_oci_config_value(tenancy_profile_name, "tenancy", tenancy_profile_config_file)
         region = get_local_oci_config_value(tenancy_profile_name, "region", tenancy_profile_config_file)
+
+        # define resources here
+        
         OciProvider(self, "oci",
                 config_file_profile=tenancy_profile_name)
 
@@ -49,9 +51,9 @@ class PrivilegedUser(TerraformStack):
         api_keys = PrivateKey(self, f"{priv_user}_keys",
                 algorithm="RSA")
         
-        comp = IdentityCompartment(self, f"{compartment}_compartment",
-                name=compartment,
-                description=f"{compartment} compartment",
+        comp = IdentityCompartment(self, f"{priv_compartment}_compartment",
+                name=priv_compartment,
+                description=f"{priv_compartment} compartment",
                 enable_delete=True,
                 compartment_id=tenancyID)
         user = IdentityUser(self, f"{priv_user}",
@@ -77,9 +79,9 @@ class PrivilegedUser(TerraformStack):
                 user_id=user.id,
                 key_value=api_keys.public_key_pem)
 
-        comp_id = TerraformOutput(self, f"{compartment}_id",
-                value=comp.id)
-        self.desired_comp_id = comp_id.friendly_unique_id
+        self.priv_compartment = TerraformOutput(self, f"{priv_compartment}_id",
+                value=comp.id).friendly_unique_id
+
         TerraformOutput(self, f"{priv_user}_id",
                 value=user.id)
         TerraformOutput(self, f"{priv_group}_id",
