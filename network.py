@@ -1,5 +1,5 @@
-from constructs import Construct
-from cdktf import TerraformStack
+from constructs import Construct, Node
+from cdktf import TerraformStack, TerraformOutput
 from imports.oci import (
     OciProvider,
     CoreVcn,
@@ -22,6 +22,9 @@ profile_name = "cdk-user"
 oci_config_file = f"{os.environ['HOME']}/.oci/config.{profile_name}"
 
 class Network(TerraformStack):
+
+    network_public_subnet = None
+
     def __init__(self, scope: Construct, ns: str, priv_compartment , remote_state):
         super().__init__(scope, ns)
 
@@ -81,3 +84,8 @@ class Network(TerraformStack):
                 subnet_id=public_subnet.id,
                 route_table_id=route_table.id)
 
+        self.network_public_subnet = TerraformOutput(self, f"{network_prefix}_network_public_subnet",
+                value=public_subnet.id).friendly_unique_id
+
+    def name(self):
+        return Node.of(self).id
