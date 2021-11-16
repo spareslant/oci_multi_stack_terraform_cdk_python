@@ -20,7 +20,8 @@ class RunStack(TerraformStack):
             return DataTerraformRemoteStateLocal(scope, id,
                 path=f"{os.path.dirname(os.path.abspath(__file__))}/terraform.{priv_user.name()}.tfstate")
 
-        Network(app, "create_network", priv_user.priv_compartment, create_remote_state)
+        if os.path.exists(f"{os.environ['HOME']}/.oci/config.cdk-user"):
+            Network(app, "create_network", priv_user.priv_compartment, create_remote_state)
 
 RunStack(app, "dummy_hosting_stack")
 app.synth()
