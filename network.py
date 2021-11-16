@@ -2,7 +2,15 @@ from constructs import Construct
 from cdktf import TerraformStack
 from imports.oci import (
     OciProvider,
-    CoreVcn
+    CoreVcn,
+	CoreSubnet,
+	CoreDhcpOptions,
+	CoreInternetGateway,
+	CoreInternetGateway,
+	CoreRouteTable,
+	CoreDhcpOptionsOptions,
+	CoreRouteTableRouteRules,
+	CoreRouteTableAttachment
     )
 from local_utils import (
     get_local_oci_config_value)
@@ -34,7 +42,42 @@ class Network(TerraformStack):
                 tenancy_ocid=tenancy_ocid,
                 user_ocid=user_ocid)
 
-        CoreVcn(self, f"{network_prefix}_vcn",
+        vcn = CoreVcn(self, f"{network_prefix}_vcn",
                 cidr_block="10.0.0.0/16",
                 display_name=f"{network_prefix}_vcn",
                 compartment_id=priv_compartment_id)
+
+        dhcp_options = CoreDhcpOptions(self, "DHCP_OPTIONS",
+                compartment_id=priv_compartment_id,
+                vcn_id=vcn.id,
+                options=[
+                    CoreDhcpOptionsOptions(
+                    type="DomainNameServer",
+                    server_type="VcnLocalPlusInternet")
+                ]
+            )
+
+        public_subnet = CoreSubnet(self, f"{network_prefix}_public_subnet",
+                cidr_block="10.0.0.0/24",
+                vcn_id=vcn.id,
+                compartment_id=priv_compartment_id,
+                display_name="public_subnet",
+                dhcp_options_id=dhcp_options.id)
+
+        internet_gateway = CoreInternetGateway(self, f"{network_prefix}_internet_gateway",
+                compartment_id=priv_compartment_id,
+                vcn_id=vcn.id)
+
+        route_table = CoreRouteTable(self, f"{network_prefix}_route_table",
+                compartment_id=priv_compartment_id,
+                vcn_id=vcn.id,
+                route_rules=[
+                    CoreRouteTableRouteRules(
+                        network_entity_id=internet_gateway.id,
+                        destination="0.0.0.0/0"
+                        )
+                    ])
+        CoreRouteTableAttachment(self, f"{network_prefix}_route_attachment",
+                subnet_id=public_subnet.id,
+                route_table_id=route_table.id)
+
