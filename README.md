@@ -7,10 +7,11 @@ draft: true
 # Introduction
 We will be creating a public facing VM in Oracle Cloud Infrastructure (OCI) using terraform cdk toolkit. We will be writing terraform code in `Python` and we will be using `terraform stacks`. 
 
+
 ## What will be done in terraform stack
-* We will create a stack `priv_user_compartment` to create a privileged user and a compartment. This user will have full admin rights in this compartment.
-* We will create a stack `network` to create `VCN`, `subnets`, `internet gateway`, `dhcp options`, `route tables` etc. in above created `compartment`. This stack will use above created user's credentials.
-* We will create a stack `vm_instance` to create a internet facing VM in above created `VCN` and `compartment` and uses above created user's credentials to do so.
+* We will create a stack `priv_user_compartment` to create a privileged user `cdk-user` and a compartment `CDK`. This user will have full admin rights in this compartment.
+* We will create a stack `network` to create `VCN`, `subnets`, `internet gateway`, `dhcp options`, `route tables` etc. in above created `compartment`. This stack will use above created user's credentials (`cdk-user`) NOT tenancy admin credentials.
+* We will create a stack `vm_instance` to create a internet facing VM in above created `VCN` and `compartment` and this stack uses above created user's credentials `cdk-user` to do so.
 * Code will be passing information from one stack to another.
 
 
@@ -21,6 +22,7 @@ We will be creating a public facing VM in Oracle Cloud Infrastructure (OCI) usin
 * Pipenv: We will be using `pipenv`
 
 **Note:** `pipenv` creates python virtual environment behind the scenes. 
+
 
 ### Install `python` via `pyenv`
 ```bash
@@ -59,7 +61,7 @@ $ cdktf --version
 0.7.0
 ```
 
-## Prepare coding directory
+## Prepare coding directory (if starting from scratch)
 
 ### Initiate `cdktf` project
 ```bash
@@ -79,8 +81,23 @@ pipenv install pycryptodome oci oci-cli
 cdktf.json  help  main.py  Pipfile  Pipfile.lock
 ```
 
+## Prepare coding directory (if cloning the repo)
+
+### Clone repo
+```bash
+git clone https://github.com/spareslant/oci_multi_stack_terraform_cdk_python.git
+cd oci_multi_stack_terraform_cdk_python
+```
+
+### Install required pip modules using pipenv
+```bash
+pipenv sync
+```
+
 ### Download OCI terraform modules libraries
+
 #### Add terraform provider information in `cdktf.json` file
+**Note:** No need for this step if using cloned repo as working directory.
 ```json
 {
   "language": "python",
@@ -129,6 +146,7 @@ Pipfile.lock            help                    main.py                 package.
     * Copy the content in `Configuration File Preview` and save it. We need it later on.
     * click `close`
 
+
 ### Configure Tenancy Admin account to access OCI via APIs
 You can run `oci setup config` command to setup the oci config. But we will be following direct manual method as we already have config saved in previous step when we prepared the oci envrionment.
 ```bash
@@ -162,6 +180,7 @@ key_file=~/.oci/tenancyAdmin_private_api_key.pem
 ```
 Please note `key_file=` above.
 
+
 ### Verify connectivity to OCI
 ```bash
 cd oci_multi_stack_terraform_cdk_python
@@ -171,13 +190,24 @@ exit
 ```
 Above command (`oci iam user list`) must run successfully.
 
-## Start Coding
-Populate `common.py`, `main.py`, `local_utils.py`, `privUserAndCompartment.py`, `network.py` and `systemsAndApps.py` with contents as mentioned in this git repo.
+
+## Prepare terraform code to execute
+Populate following files with contents as mentioned in this git repo.
+
+* `common.py`
+* `main.py`
+* `local_utils.py`
+* `privUserAndCompartment.py`
+* `network.py`
+* `systemsAndApps.py`
+* `cdktf.json`
+
+
+## Deploy stacks
 
 ### list stacks
 ```
 $ cdktf list
-
 
 WARNING!!!!!!!!: Terraform might have written a new oci config file at /Users/gpal/.oci/config.cdk-user. Terraform will manage this file automatically.
 
@@ -189,10 +219,10 @@ network                         cdktf.out/stacks/network
 ```
 **Note:** Listing of stacks is not in order. You need to run the each stack separately. Hence if there is depencies among stacks then you need to remember the order of deployment and destruction of stacks.
 
+
 ### Deploy first stack `priv_user_compartment`
 ```
 $ cdktf deploy priv_user_compartment --auto-approve
-
 
 WARNING!!!!!!!!: Terraform might have written a new oci config file at ~/.oci/config.cdk-user. Terraform will manage this file automatically.
 
@@ -216,6 +246,7 @@ Resources
 Summary: 10 created, 0 updated, 0 destroyed.
 ```
 
+
 ### Deploy second stack `network`
 ```
 $ cdktf deploy network --auto-approve
@@ -232,6 +263,7 @@ Resources
 Summary: 2 created, 0 updated, 0 destroyed.
 
 ```
+
 
 ### Deploy third stack `vm_instance`
 ```
@@ -250,4 +282,85 @@ Resources
 Summary: 3 created, 0 updated, 0 destroyed.
 
 Output: cdk_vm_public_ip = xxx.yyy.zzz.vvv
+```
+
+### destroy stacks (reverse order of deployment)
+```bash
+cdktf destroy vm_instance --auto-approve
+cdktf destroy network --auto-approve
+cdktf destroy priv_user_compartment --auto-approve
+```
+
+## How is passing information among stacks working
+
+### In file `main.py`
+```python
+class RunStack(TerraformStack):
+
+    def __init__(self, scope: Construct, ns: str):
+        super().__init__(scope, ns)
+
+        priv_user = PrivilegedUser(self, "priv_user_compartment")
+
+        def user_comp_remote_state(scope, id):
+            state_file=f"{os.path.dirname(os.path.abspath(__file__))}/terraform.{priv_user.name()}.tfstate"
+            return DataTerraformRemoteStateLocal(scope, id,
+                path=state_file)
+
+        network = Network(app, "network",
+                priv_user.priv_compartment,
+                user_comp_remote_state)
+
+        def network_remote_state(scope, id):
+            state_file=f"{os.path.dirname(os.path.abspath(__file__))}/terraform.{network.name()}.tfstate"
+            return DataTerraformRemoteStateLocal(scope, id,
+                path=state_file)
+
+        VmInstance(self, "vm_instance",
+               priv_user.priv_compartment,
+               network.network_public_subnet,
+               user_comp_remote_state,
+               network_remote_state) 
+```
+
+### In file `privUserAndCompartment.py`
+```python
+class PrivilegedUser(TerraformStack):
+
+    priv_compartment = None
+
+    def __init__(self, scope: Construct, ns: str):
+        super().__init__(scope, ns)
+
+        self.priv_compartment = TerraformOutput(self, f"{priv_compartment}_id",
+                value=comp.id).friendly_unique_id
+```
+
+### In file `network.py`
+```python
+class Network(TerraformStack):
+
+    network_public_subnet = None
+
+    def __init__(self, scope: Construct, ns: str, priv_compartment , remote_state):
+        super().__init__(scope, ns)
+
+        terraform_state = remote_state(self, ns)
+        priv_compartment_id = terraform_state.get_string(priv_compartment)
+```
+
+### In file `systemsAndApps.py`
+```python
+class VmInstance(TerraformStack):
+    def __init__(self, scope: Construct, ns: str,
+            priv_compartment,
+            public_subnet,
+            user_comp_remote_state,
+            network_remote_state):
+        super().__init__(scope, ns)
+
+        u_terraform_state = user_comp_remote_state(self, ns)
+        n_terraform_state = network_remote_state(self, ns + "_network")
+        priv_compartment_id = u_terraform_state.get_string(priv_compartment)
+        public_subnet_id = n_terraform_state.get_string(public_subnet)
 ```
