@@ -283,6 +283,14 @@ Summary: 3 created, 0 updated, 0 destroyed.
 
 Output: cdk_vm_public_ip = xxx.yyy.zzz.vvv
 ```
+**Note:** Above deployment has created a `keys/private_key.pem` for above created VM.
+
+
+### Test the deployment
+Login to VM
+```bash
+ssh -i keys/private_key.pem opc@IP_Address_of_above_created_VM
+```
 
 ### destroy stacks (reverse order of deployment)
 ```bash
