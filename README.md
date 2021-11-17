@@ -376,3 +376,9 @@ class VmInstance(TerraformStack):
         priv_compartment_id = u_terraform_state.get_string(priv_compartment)
         public_subnet_id = n_terraform_state.get_string(public_subnet)
 ```
+
+## Observations
+* Stacks inter-dependency is not very easy to implement yet.
+* Each Stack has to be deployed separately. No one command to deploy all stacks
+* Passing information among stack is cumbersome.
+* Terraform-cdk is still in development. Limitations may disappear as it evolves in future.
