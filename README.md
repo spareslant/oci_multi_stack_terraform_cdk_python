@@ -8,9 +8,10 @@ draft: true
 We will be creating a public facing VM in Oracle Cloud Infrastructure (OCI) using terraform cdk toolkit. We will be writing terraform code in `Python` and we will be using `terraform stacks`. 
 
 ## What will be done in terraform stack
-* We will create a stack `create_privileged_user` to create a privileged user
-* We will create a stack `create_networking` to create `VCN` and `subnets`
-* We will create a stack `create_vm` to create a internet facing VM
+* We will create a stack `priv_user_compartment` to create a privileged user and a compartment. This user will have full admin rights in this compartment.
+* We will create a stack `network` to create `VCN`, `subnets`, `internet gateway`, `dhcp options`, `route tables` etc. in above created `compartment`. This stack will use above created user's credentials.
+* We will create a stack `vm_instance` to create a internet facing VM in above created `VCN` and `compartment` and uses above created user's credentials to do so.
+* Code will be passing information from one stack to another.
 
 
 ## Development Environment
@@ -171,178 +172,82 @@ exit
 Above command (`oci iam user list`) must run successfully.
 
 ## Start Coding
+Populate `common.py`, `main.py`, `local_utils.py`, `privUserAndCompartment.py`, `network.py` and `systemsAndApps.py` with contents as mentioned in this git repo.
 
-### Create a helper library `account.py` with following contents
-```bash
-touch account.py
+### list stacks
+```
+$ cdktf list
+
+
+WARNING!!!!!!!!: Terraform might have written a new oci config file at /Users/gpal/.oci/config.cdk-user. Terraform will manage this file automatically.
+
+Stack name                      Path
+dummy_hosting_stack             cdktf.out/stacks/dummy_hosting_stack
+priv_user_compartment           cdktf.out/stacks/priv_user_compartment
+vm_instance                     cdktf.out/stacks/vm_instance
+network                         cdktf.out/stacks/network
+```
+**Note:** Listing of stacks is not in order. You need to run the each stack separately. Hence if there is depencies among stacks then you need to remember the order of deployment and destruction of stacks.
+
+### Deploy first stack `priv_user_compartment`
+```
+$ cdktf deploy priv_user_compartment --auto-approve
+
+
+WARNING!!!!!!!!: Terraform might have written a new oci config file at ~/.oci/config.cdk-user. Terraform will manage this file automatically.
+
+Deploying Stack: priv_user_compartment
+Resources
+ ✔ LOCAL_FILE           cdk-user_private_ke local_file.cdk-user_private_key_file
+                        y_file
+ ✔ LOCAL_FILE           cdk-user_public_key local_file.cdk-user_public_key_file
+                        _file
+ ✔ LOCAL_FILE           oci_config_file     local_file.oci_config_file
+ ✔ OCI_IDENTITY_API_KEY cdk-user_api_keys   oci_identity_api_key.cdk-user_api_keys
+ ✔ OCI_IDENTITY_COMPART CDK_compartment     oci_identity_compartment.CDK_compartmen
+   MENT                                     t
+ ✔ OCI_IDENTITY_GROUP   cdk-group           oci_identity_group.cdk-group
+ ✔ OCI_IDENTITY_POLICY  cdk-group_policy    oci_identity_policy.cdk-group_policy
+ ✔ OCI_IDENTITY_USER    cdk-user            oci_identity_user.cdk-user
+ ✔ OCI_IDENTITY_USER_GR cdk-user_cdk-group_ oci_identity_user_group_membership.cdk-
+   OUP_MEMBERSHIP       membership          user_cdk-group_membership
+ ✔ TLS_PRIVATE_KEY      cdk-user_keys       tls_private_key.cdk-user_keys
+
+Summary: 10 created, 0 updated, 0 destroyed.
 ```
 
-##### `account.py` contents
-```python
-#! /usr/bin/env python
+### Deploy second stack ``
+```
+$ cdktf deploy network --auto-approve
 
-import configparser
-import os, io
 
-tenancy_profile_name = "DEFAULT"
+WARNING!!!!!!!!: Terraform might have written a new oci config file at ~/.oci/config.cdk-user. Terraform will manage this file automatically.
 
-def get_local_oci_config_value(profile_name, config_field):
-    c = configparser.ConfigParser()
-    c.read(os.environ['HOME'] + '/.oci/config')
-    return c[profile_name][config_field]
+Deploying Stack: network
+Resources
+ ✔ OCI_CORE_ROUTE_TABLE cdk_route_table     oci_core_route_table.cdk_route_table
+ ✔ OCI_CORE_ROUTE_TABLE cdk_route_attachmen oci_core_route_table_attachment.cdk_rou
+   _ATTACHMENT          t                   te_attachment
 
-def write_oci_config_file(user, oci_user_creds):
-    oci_user_config_file = os.environ['HOME'] + '/.oci/config'
-    c = configparser.ConfigParser()
-    c.read(oci_user_config_file)
+Summary: 2 created, 0 updated, 0 destroyed.
 
-    c[user] = oci_user_creds
-    with io.StringIO() as oci_config_string:
-        c.write(oci_config_string)
-        oci_config = oci_config_string.getvalue()
-    return oci_config
-
-if __name__ == '__main__':
-    print(f"root_compartment_id = {get_local_oci_config_value(tenancy_profile_name, 'tenancy')}")
 ```
 
-#### update `main.py` with following contents
-
-##### `main.py` contents
-```python
-#!/usr/bin/env python
-from cdktf import App
-
-from privileged_oci import PrivilegedUser
-#from network_oci import Network
-
-app = App()
-privlege_user = PrivilegedUser(app, "create_privileged_user")
-privlege_user.message()
-#Network(app, "create_network")
-
-app.synth()
+### Deploy third stack `vm_instance`
 ```
-
-#### Create a new file `privileged_oci.py` for `create_privileged_user` stack
-```bash
-touch privileged_oci.py
-```
-
-##### `privileged_oci.py` contents
-```python
-from constructs import Construct
-from cdktf import TerraformStack, TerraformOutput
-from imports.tls import TlsProvider, PrivateKey
-from imports.local import LocalProvider, File
-from imports.oci import (
-    OciProvider,
-    IdentityCompartment,
-    IdentityUser,
-    IdentityGroup,
-    IdentityUserGroupMembership,
-    IdentityPolicy,
-    IdentityApiKey
-    )
-from account import (
-    tenancy_profile_name,
-    get_local_oci_config_value,
-    write_oci_config_file)
-
-import os
-
-compartment="CDK"
-priv_user="cdk-user"
-priv_group="cdk-group"
-group_policy_1=f"Allow group {priv_group} to manage all-resources in compartment {compartment}"
-oci_config_dir=f"{os.environ['HOME']}/.oci"
-priv_user_private_key_file=f"{oci_config_dir}/{priv_user}_private_key.pem"
-priv_user_public_key_file=f"{oci_config_dir}/{priv_user}_public_key.pem"
-new_oci_config_file=f"{oci_config_dir}/config.by.terraform"
+$ cdktf deploy vm_instance --auto-approve
 
 
-class PrivilegedUser(TerraformStack):
-    def __init__(self, scope: Construct, ns: str):
-        super().__init__(scope, ns)
+WARNING!!!!!!!!: Terraform might have written a new oci config file at ~/.oci/config.cdk-user. Terraform will manage this file automatically.
 
-        # define resources here
-        
-        tenancyID = get_local_oci_config_value(tenancy_profile_name, "tenancy")
-        region = get_local_oci_config_value(tenancy_profile_name, "region")
-        OciProvider(self, "oci",
-                config_file_profile=tenancy_profile_name)
+Deploying Stack: vm_instance
+Resources
+ ✔ LOCAL_FILE           cdk_vm_private_key_ local_file.cdk_vm_private_key_file
+                        file
+ ✔ OCI_CORE_INSTANCE    cdk_vm_instance     oci_core_instance.cdk_vm_instance
+ ✔ TLS_PRIVATE_KEY      cdk_vm_keys         tls_private_key.cdk_vm_keys
 
-        TlsProvider(self, "oci_tls")
+Summary: 3 created, 0 updated, 0 destroyed.
 
-        LocalProvider(self, "oci_local_provider")
-
-        api_keys = PrivateKey(self, f"{priv_user}_keys",
-                algorithm="RSA")
-        
-        comp = IdentityCompartment(self, f"{compartment}_compartment",
-                name=compartment,
-                description=f"{compartment} compartment",
-                enable_delete=True,
-                compartment_id=tenancyID)
-        user = IdentityUser(self, f"{priv_user}",
-                name=priv_user,
-                description=f"{priv_user} user",
-                compartment_id=tenancyID)
-        group = IdentityGroup(self, f"{priv_group}",
-                name=priv_group,
-                description=f"{priv_group} group",
-                compartment_id=tenancyID)
-        IdentityUserGroupMembership(self,
-                f"{priv_user}_{priv_group}_membership",
-                group_id=group.id,
-                user_id=user.id)
-        IdentityPolicy(self, f"{priv_group}_policy",
-                name=f"{priv_group}_policy",
-                description=f"{priv_group} policies",
-                compartment_id=comp.id,
-                statements=[
-                   group_policy_1
-                ])
-        user_api_key = IdentityApiKey(self, f"{priv_user}_api_keys",
-                user_id=user.id,
-                key_value=api_keys.public_key_pem)
-
-        TerraformOutput(self, f"{compartment}_id",
-                value=comp.id)
-        TerraformOutput(self, f"{priv_user}_id",
-                value=user.id)
-        TerraformOutput(self, f"{priv_group}_id",
-                value=group.id)
-        TerraformOutput(self, f"{priv_user}_private_key",
-                value=api_keys.private_key_pem,
-                sensitive=True)
-        TerraformOutput(self, f"{priv_user}_fingerprint",
-                value=user_api_key.fingerprint)
-
-        File(self, f"{priv_user}_private_key_file",
-                content=api_keys.private_key_pem,
-                filename=priv_user_private_key_file)    
-        File(self, f"{priv_user}_public_key_file",
-                content=api_keys.public_key_pem,
-                filename=priv_user_public_key_file)    
-
-        priv_user_oci_creds = {}
-        priv_user_oci_creds["user"] = user.id
-        priv_user_oci_creds["fingerprint"] = user_api_key.fingerprint
-        priv_user_oci_creds["tenancy"] = tenancyID
-        priv_user_oci_creds["region"] = region
-        priv_user_oci_creds["key_file"] = f"~/.oci/{priv_user}_private_key.pem"
-
-        # We can't write ~/.oci/config file without File terraform resource, because
-        # used.id and user_api_key.fingerprint etc will be evaluated only during the
-        # File resource call.
-        # If we use python file write functions here, it gets executed very first thing
-        # in terraform and user.id and user_api_key.fingerprint would NOT have been
-        # evaluated.
-        File(self, "oci_config_file",
-                content=write_oci_config_file(priv_user, priv_user_oci_creds),
-                filename=new_oci_config_file)
-
-    def message(self):
-        print(f"WARNING!!!!!!!!: Terraform might have written a new oci config file at {new_oci_config_file}. Terraform will manage this file automatically.")
+Output: cdk_vm_public_ip = xxx.yyy.zzz.vvv
 ```
