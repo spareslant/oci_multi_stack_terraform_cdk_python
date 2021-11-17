@@ -216,7 +216,7 @@ Resources
 Summary: 10 created, 0 updated, 0 destroyed.
 ```
 
-### Deploy second stack ``
+### Deploy second stack `network`
 ```
 $ cdktf deploy network --auto-approve
 
