@@ -324,6 +324,8 @@ class RunStack(TerraformStack):
 ```
 
 ### In file `privUserAndCompartment.py`
+* `priv_user_compartment` stack is exposing `priv_compartment` using `TerraformOutput`
+
 ```python
 class PrivilegedUser(TerraformStack):
 
@@ -337,6 +339,9 @@ class PrivilegedUser(TerraformStack):
 ```
 
 ### In file `network.py`
+* `network` stack is using exposed `priv_compartment` from `priv_user_compartment` stack.
+* `network` stack is also exposing `network_public_subnet`
+
 ```python
 class Network(TerraformStack):
 
@@ -347,9 +352,16 @@ class Network(TerraformStack):
 
         terraform_state = remote_state(self, ns)
         priv_compartment_id = terraform_state.get_string(priv_compartment)
+
+        self.network_public_subnet = TerraformOutput(self, f"{unique_id}_network_public_subnet",
+                value=public_subnet.id).friendly_unique_id
+
 ```
 
 ### In file `systemsAndApps.py`
+* `vm_instance` instance stack is using exposed `priv_compartment` from `priv_user_compartment` stack
+* `vm_instance` instance stack is using exposed `network_public_subnet` from `network` stack
+
 ```python
 class VmInstance(TerraformStack):
     def __init__(self, scope: Construct, ns: str,
