@@ -12,22 +12,21 @@ from imports.oci import (
     IdentityApiKey
     )
 from local_utils import (
-    get_local_oci_config_value,
+    user_creds,
     write_oci_config_file)
 
-import os
-
-priv_compartment = "CDK"
-priv_user = "cdk-user"
-priv_group = "cdk-group"
-group_policy_1 = f"Allow group {priv_group} to manage all-resources in compartment {priv_compartment}"
-oci_config_dir = f"{os.environ['HOME']}/.oci"
-priv_user_private_key_file = f"{oci_config_dir}/{priv_user}_private_api_key.pem"
-oci_config_private_key_filename = f"~/.oci/{priv_user}_private_api_key.pem"
-priv_user_public_key_file = f"{oci_config_dir}/{priv_user}_public_api_key.pem"
-new_oci_config_file = f"{oci_config_dir}/config.{priv_user}"
-tenancy_profile_name = "DEFAULT"
-tenancy_profile_config_file = f"{oci_config_dir}/config"
+from common import (
+    priv_compartment,
+    priv_user,
+    priv_group,
+    group_policy_1,
+    oci_config_private_key_filename,
+    priv_user_private_key_file,
+    priv_user_public_key_file,
+    priv_user_oci_config_file,
+    tenancy_profile_name,
+    tenancy_profile_config_file
+        )
 
 class PrivilegedUser(TerraformStack):
 
@@ -36,8 +35,7 @@ class PrivilegedUser(TerraformStack):
     def __init__(self, scope: Construct, ns: str):
         super().__init__(scope, ns)
 
-        tenancyID = get_local_oci_config_value(tenancy_profile_name, "tenancy", tenancy_profile_config_file)
-        region = get_local_oci_config_value(tenancy_profile_name, "region", tenancy_profile_config_file)
+        (_, _, region, tenancyID, _) = user_creds(tenancy_profile_name, tenancy_profile_config_file)
 
         # define resources here
         
@@ -116,11 +114,11 @@ class PrivilegedUser(TerraformStack):
         # evaluated.
         File(self, "oci_config_file",
                 content=write_oci_config_file(priv_user, priv_user_oci_creds),
-                filename=new_oci_config_file,
+                filename=priv_user_oci_config_file,
                 file_permission="0600")
 
     def name(self):
         return Node.of(self).id
 
     def message(self):
-        print(f"WARNING!!!!!!!!: Terraform might have written a new oci config file at {new_oci_config_file}. Terraform will manage this file automatically.")
+        print(f"WARNING!!!!!!!!: Terraform might have written a new oci config file at {priv_user_oci_config_file}. Terraform will manage this file automatically.")

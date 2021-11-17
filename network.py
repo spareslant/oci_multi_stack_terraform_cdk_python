@@ -15,11 +15,11 @@ from imports.oci import (
 from local_utils import (
         user_creds)
 
-import os
-
-network_prefix = "cdk"
-profile_name = "cdk-user"
-oci_config_file = f"{os.environ['HOME']}/.oci/config.{profile_name}"
+from common import (
+        priv_user_profile_name,
+        priv_user_oci_config_file,
+        unique_id
+        )
 
 class Network(TerraformStack):
 
@@ -32,7 +32,7 @@ class Network(TerraformStack):
             private_key_path,
             region,
             tenancy_ocid,
-            user_ocid) = user_creds(profile_name, oci_config_file)
+            user_ocid) = user_creds(priv_user_profile_name, priv_user_oci_config_file)
 
         terraform_state = remote_state(self, ns)
         priv_compartment_id = terraform_state.get_string(priv_compartment)
@@ -45,9 +45,9 @@ class Network(TerraformStack):
                 tenancy_ocid=tenancy_ocid,
                 user_ocid=user_ocid)
 
-        vcn = CoreVcn(self, f"{network_prefix}_vcn",
+        vcn = CoreVcn(self, f"{unique_id}_vcn",
                 cidr_block="10.0.0.0/16",
-                display_name=f"{network_prefix}_vcn",
+                display_name=f"{unique_id}_vcn",
                 compartment_id=priv_compartment_id)
 
         dhcp_options = CoreDhcpOptions(self, "DHCP_OPTIONS",
@@ -60,18 +60,18 @@ class Network(TerraformStack):
                 ]
             )
 
-        public_subnet = CoreSubnet(self, f"{network_prefix}_public_subnet",
+        public_subnet = CoreSubnet(self, f"{unique_id}_public_subnet",
                 cidr_block="10.0.0.0/24",
                 vcn_id=vcn.id,
                 compartment_id=priv_compartment_id,
                 display_name="public_subnet",
                 dhcp_options_id=dhcp_options.id)
 
-        internet_gateway = CoreInternetGateway(self, f"{network_prefix}_internet_gateway",
+        internet_gateway = CoreInternetGateway(self, f"{unique_id}_internet_gateway",
                 compartment_id=priv_compartment_id,
                 vcn_id=vcn.id)
 
-        route_table = CoreRouteTable(self, f"{network_prefix}_route_table",
+        route_table = CoreRouteTable(self, f"{unique_id}_route_table",
                 compartment_id=priv_compartment_id,
                 vcn_id=vcn.id,
                 route_rules=[
@@ -80,11 +80,11 @@ class Network(TerraformStack):
                         destination="0.0.0.0/0"
                         )
                     ])
-        CoreRouteTableAttachment(self, f"{network_prefix}_route_attachment",
+        CoreRouteTableAttachment(self, f"{unique_id}_route_attachment",
                 subnet_id=public_subnet.id,
                 route_table_id=route_table.id)
 
-        self.network_public_subnet = TerraformOutput(self, f"{network_prefix}_network_public_subnet",
+        self.network_public_subnet = TerraformOutput(self, f"{unique_id}_network_public_subnet",
                 value=public_subnet.id).friendly_unique_id
 
     def name(self):
