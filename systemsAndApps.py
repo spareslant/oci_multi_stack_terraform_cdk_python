@@ -10,7 +10,7 @@ from imports.oci import (
     )
 
 from local_utils import (
-    get_local_oci_config_value)
+        user_creds)
 
 import os
 network_prefix = "cdk"
@@ -25,11 +25,11 @@ class VmInstance(TerraformStack):
             network_remote_state):
         super().__init__(scope, ns)
 
-        fingerprint = get_local_oci_config_value(profile_name, "fingerprint", oci_config_file)
-        private_key_path = get_local_oci_config_value(profile_name, "key_file", oci_config_file)
-        region = get_local_oci_config_value(profile_name, "region", oci_config_file)
-        tenancy_ocid = get_local_oci_config_value(profile_name, "tenancy", oci_config_file)
-        user_ocid = get_local_oci_config_value(profile_name, "user", oci_config_file)
+        (fingerprint,
+            private_key_path,
+            region,
+            tenancy_ocid,
+            user_ocid) = user_creds(profile_name, oci_config_file)
 
         u_terraform_state = user_comp_remote_state(self, ns)
         n_terraform_state = network_remote_state(self, ns + "_network")
@@ -56,14 +56,6 @@ class VmInstance(TerraformStack):
 
         vm_keys = PrivateKey(self, f"{network_prefix}_vm_keys",
                 algorithm="RSA")
-
-        vm_keys.add_override("provisioner", [
-            {
-                "local-exec": {
-                    "command": f"mkdir keys"
-                    }
-                }
-            ])
 
         vm = CoreInstance(self, f"{network_prefix}_vm_instance",
                 compartment_id=priv_compartment_id,
